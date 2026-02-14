@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Shopping List</title>
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="過去の購入周期を元に購入タイミングを教えてくれるスマートなお買い物リスト">
+    <meta name="theme-color" content="#000000">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .status-card {
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        .swipe-container {
+            position: relative;
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+
+        .section-expand {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-in-out;
+        }
+
+        .section-expand.open {
+            max-height: 2000px;
+        }
+
+        @keyframes highlight-pop {
+            0% { transform: scale(1); background-color: #e9d5ff; }
+            50% { transform: scale(1.4); background-color: #a855f7; color: white; }
+            100% { transform: scale(1); }
+        }
+        .highlight-alert {
+            animation: highlight-pop 0.6s ease-out;
+        }
+
+        .compact-input {
+            padding-top: 0.4rem;
+            padding-bottom: 0.4rem;
+        }
+
+        .status-4 { border-left: 4px solid #8b5cf6; }
+        .status-3 { border-left: 4px solid #3b82f6; }
+        .status-2 { border-left: 4px solid #f59e0b; }
+        .status-1 { border-left: 4px solid #10b981; }
+
+        input[type="date"]::-webkit-inner-spin-button,
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="pb-10">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-[60] bg-white/90 backdrop-blur-md border-b border-gray-100 px-4 h-12 flex justify-between items-center">
+        <div class="flex items-center gap-2 overflow-hidden">
+            <button onclick="toggleListOverlay()" class="p-1 hover:bg-gray-100 rounded-lg shrink-0">
+                <i data-lucide="list" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center gap-1 min-w-0">
+                <h1 id="current-list-title" class="text-[16px] font-bold tracking-tight truncate">日用品リスト</h1>
+                <button onclick="editListName()" class="p-1 text-gray-300 hover:text-black shrink-0">
+                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center gap-0.5 shrink-0">
+            <button onclick="confirmDeleteList()" class="p-1.5 text-gray-400 hover:text-red-500 transition">
+                <i data-lucide="trash-2" class="w-5 h-5"></i>
+            </button>
+            <button onclick="toggleHelpOverlay()" class="p-1.5 text-gray-400 hover:text-black transition">
+                <i data-lucide="help-circle" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- List Selector Overlay -->
+    <div id="list-overlay" class="fixed inset-0 z-[70] invisible opacity-0 transition-all duration-300">
+        <div class="absolute inset-0 bg-black/20" onclick="toggleListOverlay()"></div>
+        <div class="absolute top-12 left-0 right-0 bg-white border-b shadow-xl p-4 max-h-[60vh] overflow-y-auto">
+            <h2 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">マイリスト</h2>
+            <div id="list-selector-container" class="space-y-1"></div>
+            <!-- Added List Add Button Back -->
+            <button onclick="addNewList()" class="w-full p-3 border border-dashed border-gray-300 rounded-xl text-gray-400 text-sm mt-3 flex items-center justify-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i> リストを新規作成
+            </button>
+        </div>
+    </div>
+
+    <!-- Corrected Help Overlay -->
+    <div id="help-overlay" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 class="text-lg font-bold mb-4 text-center">操作ガイド</h2>
+            <div class="space-y-4 text-sm text-gray-600">
+                <div class="p-3 bg-gray-50 rounded-xl">
+                    <p class="font-bold text-gray-800 mb-1 flex items-center gap-2"><i data-lucide="touchpad" class="w-4 h-4"></i> タップ</p>
+                    <p class="text-xs">ストックあり → ストックなし → 購入予定 を循環移動します。</p>
+                </div>
+                <div class="p-3 bg-gray-50 rounded-xl">
+                    <p class="font-bold text-gray-800 mb-1 flex items-center gap-2"><i data-lucide="arrow-right" class="w-4 h-4"></i> 右スワイプ</p>
+                    <p class="text-xs">配達予定 → 購入予定 → ストックなし → ストックあり の一方向に移動します。</p>
+                </div>
+                <div class="p-3 bg-gray-50 rounded-xl">
+                    <p class="font-bold text-gray-800 mb-1 flex items-center gap-2"><i data-lucide="arrow-left" class="w-4 h-4"></i> 左スワイプ</p>
+                    <p class="text-xs">購入予定 → 配達予定 に移動します。</p>
+                </div>
+            </div>
+            <button onclick="toggleHelpOverlay()" class="w-full mt-6 py-3 bg-black text-white rounded-xl font-bold">閉じる</button>
+        </div>
+    </div>
+
+    <main class="max-w-2xl mx-auto p-4 space-y-4">
+        <!-- Search -->
+        <div class="relative group">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+            <input type="text" id="search-input" oninput="handleSearch()" placeholder="商品を検索..." class="w-full pl-10 pr-10 py-2 bg-white border border-gray-200 rounded-xl focus:ring-1 focus:ring-black outline-none text-sm">
+            <button id="search-clear" onclick="clearSearch()" class="absolute right-3 top-1/2 -translate-y-1/2 hidden text-gray-400 hover:text-black">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <div id="sections-container" class="space-y-6"></div>
+    </main>
+
+    <!-- Edit Modal -->
+    <div id="modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <h2 id="modal-title" class="text-lg font-bold mb-4">商品を編集</h2>
+            <input type="hidden" id="edit-id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">商品名</label>
+                    <input id="item-name" type="text" oninput="validateModalForm()" class="w-full px-4 compact-input bg-gray-50 border-none rounded-xl focus:ring-1 focus:ring-black text-[15px]">
+                </div>
+                
+                <div class="flex gap-2">
+                    <div class="flex-[2]">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">最終購入日</label>
+                        <input id="item-last-purchased" type="date" class="w-full px-2 compact-input bg-gray-50 border-none rounded-lg text-[13px] h-[38px]">
+                    </div>
+                    <div class="flex-[1]">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">周期(日)</label>
+                        <input id="item-cycle" type="number" inputmode="numeric" class="w-full px-2 compact-input bg-gray-50 border-none rounded-lg text-sm h-[38px]">
+                    </div>
+                    <div class="flex-[1]">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">個数</label>
+                        <input id="item-quantity" type="number" inputmode="numeric" class="w-full px-2 compact-input bg-gray-50 border-none rounded-lg text-sm h-[38px]">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">メモ</label>
+                    <textarea id="item-memo" rows="2" class="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-1 focus:ring-black text-sm"></textarea>
+                </div>
+
+                <div class="flex flex-col gap-2 pt-2">
+                    <div class="flex gap-2">
+                        <button onclick="closeModal()" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-gray-700">キャンセル</button>
+                        <button id="modal-ok-btn" onclick="saveItem()" class="flex-1 py-3 bg-black text-white rounded-xl font-bold transition-opacity">OK</button>
+                    </div>
+                    <div id="delete-btn-container" class="hidden pt-2 border-t border-gray-100">
+                        <button onclick="deleteItem()" class="w-full py-2 text-red-500 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-1">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> この商品を削除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirm-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl text-center">
+            <h2 class="text-lg font-bold mb-2">リストを削除しますか？</h2>
+            <div class="flex gap-3 mt-6">
+                <button onclick="hideConfirm()" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold">いいえ</button>
+                <button onclick="deleteCurrentList()" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold">削除</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lists = [{ id: 'l1', title: '日用品リスト', items: [] }];
+        let currentListId = 'l1';
+        let sectionStates = { 4: false, 3: true, 2: true, 1: true };
+        let searchQuery = "";
+
+        const STATUS_CONFIG = {
+            4: { title: '配達予定', icon: 'truck', color: 'text-purple-500', badge: 'bg-purple-100 text-purple-600' },
+            3: { title: '購入予定', icon: 'shopping-cart', color: 'text-blue-500', badge: 'bg-blue-100 text-blue-600' },
+            2: { title: 'ストックなし', icon: 'alert-circle', color: 'text-amber-500', badge: 'bg-amber-100 text-amber-600' },
+            1: { title: 'ストックあり', icon: 'check-circle', color: 'text-emerald-500', badge: 'bg-emerald-100 text-emerald-600' }
+        };
+
+        function getCurrentItems() {
+            const list = lists.find(l => l.id === currentListId);
+            return list ? list.items : [];
+        }
+
+        function checkAutoRecommend() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+            let changed = false;
+            getCurrentItems().forEach(item => {
+                if (item.status === 1 && item.lastPurchased && item.cycle) {
+                    const nextDate = new Date(item.lastPurchased);
+                    nextDate.setDate(nextDate.getDate() + parseInt(item.cycle));
+                    const nextDateStr = nextDate.toISOString().split('T')[0];
+
+                    if (nextDateStr <= tomorrowStr && item.lastRecommended !== todayStr) {
+                        item.status = 2;
+                        item.lastRecommended = todayStr;
+                        changed = true;
+                    }
+                }
+            });
+            if (changed) render();
+        }
+
+        function render() {
+            const container = document.getElementById('sections-container');
+            container.innerHTML = '';
+            const allItems = getCurrentItems();
+            const currentList = lists.find(l => l.id === currentListId);
+            if (!currentList) return;
+
+            document.getElementById('current-list-title').innerText = currentList.title;
+
+            [4, 3, 2, 1].forEach(statusId => {
+                const sectionItems = allItems.filter(item => {
+                    return item.status === statusId && item.name.toLowerCase().includes(searchQuery.toLowerCase());
+                });
+
+                if (searchQuery && sectionItems.length > 0) sectionStates[statusId] = true;
+
+                const config = STATUS_CONFIG[statusId];
+                const section = document.createElement('section');
+                section.innerHTML = `
+                    <div class="flex items-center justify-between mb-2 px-1">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="${config.icon}" class="w-4 h-4 ${config.color}"></i>
+                            <h3 class="font-bold text-[11px] text-gray-500 uppercase tracking-wider">${config.title}</h3>
+                            <span id="badge-${statusId}" class="text-[10px] font-bold px-2 py-0.5 rounded-full ${config.badge}">${sectionItems.length}</span>
+                            <button onclick="toggleSection(${statusId})" class="ml-1 text-gray-300">
+                                <i data-lucide="${sectionStates[statusId] ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <button onclick="openModal(${statusId})" class="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 text-gray-400 rounded-full shadow-sm hover:text-black">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+
+                const itemsDiv = document.createElement('div');
+                itemsDiv.className = `space-y-1.5 ${sectionStates[statusId] ? 'section-expand open' : 'section-expand'}`;
+                
+                if (sectionItems.length === 0 && !searchQuery) {
+                    itemsDiv.innerHTML = `<div class="h-10 flex items-center justify-center border border-dashed border-gray-100 rounded-xl text-[9px] text-gray-300 uppercase tracking-widest">No Items</div>`;
+                }
+
+                sectionItems.forEach(item => {
+                    const card = createItemCard(item);
+                    itemsDiv.appendChild(card);
+                });
+
+                section.appendChild(itemsDiv);
+                container.appendChild(section);
+            });
+
+            renderListSelector();
+            lucide.createIcons();
+        }
+
+        function createItemCard(item) {
+            const div = document.createElement('div');
+            div.className = `status-card status-${item.status} bg-white rounded-lg shadow-sm border border-gray-100 swipe-container flex flex-col overflow-hidden active:scale-[0.99]`;
+            
+            div.innerHTML = `
+                <div class="px-3 py-2 flex items-center justify-between">
+                    <div class="flex-1 min-w-0" onclick="handleCardClick(${item.id}, event)">
+                        <h4 class="font-bold text-[16px] text-gray-800 truncate leading-tight pointer-events-none">${item.name}</h4>
+                        <div class="flex gap-3 mt-0.5 pointer-events-none">
+                            <span class="text-[9px] text-gray-400 uppercase font-medium">最終: ${item.lastPurchased || '--'}</span>
+                            <span class="text-[9px] text-gray-400 uppercase font-medium">周期: ${item.cycle}日</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-sm font-bold text-gray-600">${item.quantity || '1'}</span>
+                        <button onclick="openEditModal(event, ${item.id})" class="p-2 text-gray-400 hover:text-black">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+                ${item.memo ? `<div class="px-3 pb-2 text-[10px] text-gray-500 border-t border-gray-50 pt-0.5 pointer-events-none">メモ: ${item.memo}</div>` : ''}
+            `;
+
+            setupSwipe(div, item);
+            return div;
+        }
+
+        function handleCardClick(id, e) {
+            e.stopPropagation();
+            const item = getCurrentItems().find(i => i.id === id);
+            if (!item) return;
+
+            if (item.status === 1) moveTo(item.id, 2);
+            else if (item.status === 2) moveTo(item.id, 3);
+            else if (item.status === 3 || item.status === 4) completePurchase(item.id);
+        }
+
+        function setupSwipe(element, item) {
+            let startX = 0;
+            let currentX = 0;
+            const threshold = 60;
+            let isSwiping = false;
+
+            element.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isSwiping = false;
+            }, {passive: true});
+
+            element.addEventListener('touchmove', (e) => {
+                currentX = e.touches[0].clientX;
+                const diff = currentX - startX;
+                if (Math.abs(diff) > 10) {
+                    isSwiping = true;
+                    element.style.transform = `translateX(${diff}px)`;
+                }
+            }, {passive: true});
+
+            element.addEventListener('touchend', (e) => {
+                const diff = currentX - startX;
+                element.style.transform = '';
+                
+                if (isSwiping) {
+                    if (diff < -threshold && item.status === 3) {
+                        moveTo(item.id, 4);
+                        if (!sectionStates[4]) triggerAlert(4);
+                    } else if (diff > threshold) {
+                        if (item.status === 4) moveTo(item.id, 3);
+                        else if (item.status === 3) moveTo(item.id, 2);
+                        else if (item.status === 2) moveTo(item.id, 1);
+                    }
+                }
+                startX = 0; currentX = 0;
+            });
+        }
+
+        function moveTo(id, newStatus) {
+            const items = getCurrentItems();
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.status = newStatus;
+                render();
+            }
+        }
+
+        function completePurchase(id) {
+            const items = getCurrentItems();
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.lastPurchased = new Date().toISOString().split('T')[0];
+                item.status = 1;
+                render();
+            }
+        }
+
+        function triggerAlert(statusId) {
+            const badge = document.getElementById(`badge-${statusId}`);
+            if (badge) {
+                badge.classList.remove('highlight-alert');
+                void badge.offsetWidth; 
+                badge.classList.add('highlight-alert');
+            }
+        }
+
+        function handleSearch() {
+            searchQuery = document.getElementById('search-input').value;
+            const clearBtn = document.getElementById('search-clear');
+            if (searchQuery) clearBtn.classList.remove('hidden');
+            else clearBtn.classList.add('hidden');
+            render();
+        }
+
+        function clearSearch() {
+            document.getElementById('search-input').value = "";
+            searchQuery = "";
+            document.getElementById('search-clear').classList.add('hidden');
+            render();
+        }
+
+        function editListName() {
+            const list = lists.find(l => l.id === currentListId);
+            const newName = prompt("新しいリスト名を入力", list.title);
+            if (newName && newName.trim()) {
+                list.title = newName.trim();
+                render();
+            }
+        }
+
+        function addNewList() {
+            const name = prompt("リスト名を入力してください");
+            if(name && name.trim()) {
+                const newId = 'l'+Date.now();
+                lists.push({id: newId, title: name.trim(), items: []});
+                currentListId = newId;
+                toggleListOverlay();
+                render();
+            }
+        }
+
+        function toggleListOverlay() {
+            const ov = document.getElementById('list-overlay');
+            ov.classList.toggle('invisible');
+            ov.classList.toggle('opacity-0');
+        }
+
+        function renderListSelector() {
+            const container = document.getElementById('list-selector-container');
+            container.innerHTML = '';
+            lists.forEach(l => {
+                const active = l.id === currentListId;
+                const div = document.createElement('div');
+                div.className = `p-3 rounded-xl flex items-center justify-between cursor-pointer ${active ? 'bg-black text-white' : 'bg-gray-50'}`;
+                div.onclick = () => { currentListId = l.id; toggleListOverlay(); render(); };
+                div.innerHTML = `<span>${l.title}</span><i data-lucide="${active ? 'check' : 'chevron-right'}" class="w-4 h-4"></i>`;
+                container.appendChild(div);
+            });
+        }
+
+        function confirmDeleteList() { document.getElementById('confirm-modal').classList.remove('hidden'); }
+        function hideConfirm() { document.getElementById('confirm-modal').classList.add('hidden'); }
+        function deleteCurrentList() {
+            lists = lists.filter(l => l.id !== currentListId);
+            if (lists.length === 0) lists.push({ id: 'l' + Date.now(), title: '新しいリスト', items: [] });
+            currentListId = lists[0].id;
+            hideConfirm();
+            render();
+        }
+
+        function openModal(statusId = 2) {
+            window.activeStatusForAdd = statusId;
+            document.getElementById('modal-title').innerText = "商品を追加";
+            document.getElementById('edit-id').value = "";
+            document.getElementById('item-name').value = "";
+            document.getElementById('item-last-purchased').value = new Date().toISOString().split('T')[0];
+            document.getElementById('item-cycle').value = "7";
+            document.getElementById('item-quantity').value = "1";
+            document.getElementById('item-memo').value = "";
+            document.getElementById('delete-btn-container').classList.add('hidden');
+            validateModalForm();
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function openEditModal(event, id) {
+            event.stopPropagation();
+            const item = getCurrentItems().find(i => i.id === id);
+            if(!item) return;
+            document.getElementById('modal-title').innerText = "商品を編集";
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('item-name').value = item.name;
+            document.getElementById('item-last-purchased').value = item.lastPurchased || "";
+            document.getElementById('item-cycle').value = item.cycle;
+            document.getElementById('item-quantity').value = item.quantity;
+            document.getElementById('item-memo').value = item.memo || "";
+            document.getElementById('delete-btn-container').classList.remove('hidden');
+            validateModalForm();
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function validateModalForm() {
+            const name = document.getElementById('item-name').value.trim();
+            const btn = document.getElementById('modal-ok-btn');
+            if (name) {
+                btn.classList.remove('opacity-30');
+                btn.style.pointerEvents = 'auto';
+            } else {
+                btn.classList.add('opacity-30');
+                btn.style.pointerEvents = 'none';
+            }
+        }
+
+        function saveItem() {
+            const id = document.getElementById('edit-id').value;
+            const name = document.getElementById('item-name').value.trim();
+            if(!name) return;
+            const items = getCurrentItems();
+            const data = {
+                name,
+                lastPurchased: document.getElementById('item-last-purchased').value,
+                cycle: document.getElementById('item-cycle').value,
+                quantity: document.getElementById('item-quantity').value,
+                memo: document.getElementById('item-memo').value
+            };
+
+            if (id) {
+                const item = items.find(i => i.id == id);
+                Object.assign(item, data);
+            } else {
+                items.push({ id: Date.now(), status: window.activeStatusForAdd, ...data });
+            }
+            closeModal();
+            render();
+        }
+
+        function deleteItem() {
+            const id = document.getElementById('edit-id').value;
+            const list = lists.find(l => l.id === currentListId);
+            list.items = list.items.filter(i => i.id != id);
+            closeModal();
+            render();
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+        function toggleSection(id) { sectionStates[id] = !sectionStates[id]; render(); }
+        function toggleHelpOverlay() { document.getElementById('help-overlay').classList.toggle('hidden'); }
+
+        window.onload = () => {
+            render();
+            setInterval(checkAutoRecommend, 60000); 
+            checkAutoRecommend();
+        };
+    </script>
+</body>
+</html>
+
