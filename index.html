@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <link rel="manifest" href="manifest.json">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Shopping List</title>
+    <link rel="manifest" href="manifest.json">
     <!-- PWA Meta Tags -->
     <meta name="description" content="過去の購入周期を元に購入タイミングを教えてくれるスマートなお買い物リスト">
     <meta name="theme-color" content="#000000">
@@ -78,14 +78,14 @@
             </button>
             <div class="flex items-center gap-1 min-w-0">
                 <h1 id="current-list-title" class="text-[16px] font-bold tracking-tight truncate">日用品リスト</h1>
-                <button onclick="editListName()" class="p-1 text-gray-300 hover:text-black shrink-0">
+                <button onclick="openEditListModal()" class="p-1 text-gray-300 hover:text-black shrink-0">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                 </button>
             </div>
         </div>
         <div class="flex items-center gap-0.5 shrink-0">
-            <button onclick="confirmDeleteList()" class="p-1.5 text-gray-400 hover:text-red-500 transition">
-                <i data-lucide="trash-2" class="w-5 h-5"></i>
+            <button onclick="toggleSettingsOverlay()" class="p-1.5 text-gray-400 hover:text-black transition">
+                <i data-lucide="settings" class="w-5 h-5"></i>
             </button>
             <button onclick="toggleHelpOverlay()" class="p-1.5 text-gray-400 hover:text-black transition">
                 <i data-lucide="help-circle" class="w-5 h-5"></i>
@@ -99,14 +99,13 @@
         <div class="absolute top-12 left-0 right-0 bg-white border-b shadow-xl p-4 max-h-[60vh] overflow-y-auto">
             <h2 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">マイリスト</h2>
             <div id="list-selector-container" class="space-y-1"></div>
-            <!-- Added List Add Button Back -->
             <button onclick="addNewList()" class="w-full p-3 border border-dashed border-gray-300 rounded-xl text-gray-400 text-sm mt-3 flex items-center justify-center gap-2">
                 <i data-lucide="plus" class="w-4 h-4"></i> リストを新規作成
             </button>
         </div>
     </div>
 
-    <!-- Corrected Help Overlay -->
+    <!-- Help Overlay -->
     <div id="help-overlay" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
             <h2 class="text-lg font-bold mb-4 text-center">操作ガイド</h2>
@@ -128,6 +127,36 @@
         </div>
     </div>
 
+    <!-- Settings Overlay -->
+    <div id="settings-overlay" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto">
+            <h2 class="text-lg font-bold mb-4 text-center">設定・データ管理</h2>
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">データのエクスポート</label>
+                    <p class="text-[10px] text-gray-500 mb-2">保存用ファイルをローカルにダウンロードします。</p>
+                    <div class="flex flex-col gap-2">
+                        <button onclick="exportData(true)" class="w-full py-2.5 bg-gray-100 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4"></i> 全リスト一括エクスポート
+                        </button>
+                        <button id="export-single-btn" onclick="exportData(false)" class="w-full py-2.5 bg-gray-100 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                            <i data-lucide="file-text" class="w-4 h-4"></i> 現在のリスト (読み込み中...)
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">データのインポート</label>
+                    <p class="text-[10px] text-gray-500 mb-2">保存したJSONファイルを選択して、新規リストとして取り込みます。</p>
+                    <input type="file" id="import-file-input" accept=".json" class="hidden" onchange="handleFileImport(event)">
+                    <button onclick="document.getElementById('import-file-input').click()" class="w-full py-3 bg-black text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                        <i data-lucide="upload" class="w-4 h-4"></i> ファイルを選択して読込
+                    </button>
+                </div>
+            </div>
+            <button onclick="toggleSettingsOverlay()" class="w-full mt-8 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold">閉じる</button>
+        </div>
+    </div>
+
     <main class="max-w-2xl mx-auto p-4 space-y-4">
         <!-- Search -->
         <div class="relative group">
@@ -141,7 +170,7 @@
         <div id="sections-container" class="space-y-6"></div>
     </main>
 
-    <!-- Edit Modal -->
+    <!-- Item Edit Modal -->
     <div id="modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
         <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
             <h2 id="modal-title" class="text-lg font-bold mb-4">商品を編集</h2>
@@ -187,11 +216,34 @@
         </div>
     </div>
 
+    <!-- List Edit Modal -->
+    <div id="list-edit-modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 class="text-lg font-bold mb-4">リストの設定</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">リスト名</label>
+                    <input id="edit-list-name-input" type="text" class="w-full px-4 compact-input bg-gray-50 border-none rounded-xl focus:ring-1 focus:ring-black text-[15px]">
+                </div>
+                <div class="flex flex-col gap-2 pt-2">
+                    <button onclick="saveListName()" class="w-full py-3 bg-black text-white rounded-xl font-bold">保存</button>
+                    <button onclick="closeEditListModal()" class="w-full py-2 bg-gray-100 rounded-xl font-bold text-gray-500 text-sm">キャンセル</button>
+                    <div class="pt-4 mt-2 border-t border-gray-100">
+                        <button onclick="confirmDeleteList()" class="w-full py-2 text-red-500 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-1">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> このリストを削除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirm Dialog -->
     <div id="confirm-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
         <div class="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl text-center">
             <h2 class="text-lg font-bold mb-2">リストを削除しますか？</h2>
-            <div class="flex gap-3 mt-6">
+            <p class="text-xs text-gray-400 mb-6">リストに含まれる全データが失われます。</p>
+            <div class="flex gap-3">
                 <button onclick="hideConfirm()" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold">いいえ</button>
                 <button onclick="deleteCurrentList()" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold">削除</button>
             </div>
@@ -199,10 +251,16 @@
     </div>
 
     <script>
-        let lists = [{ id: 'l1', title: '日用品リスト', items: [] }];
-        let currentListId = 'l1';
+        // Storage Logic
+        const STORAGE_KEY = 'shopping_list_data_v7';
+        let lists = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [{ id: 'l1', title: '日用品リスト', items: [] }];
+        let currentListId = lists[0]?.id || 'l1';
         let sectionStates = { 4: false, 3: true, 2: true, 1: true };
         let searchQuery = "";
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
+        }
 
         const STATUS_CONFIG = {
             4: { title: '配達予定', icon: 'truck', color: 'text-purple-500', badge: 'bg-purple-100 text-purple-600' },
@@ -223,30 +281,49 @@
             const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
             let changed = false;
-            getCurrentItems().forEach(item => {
-                if (item.status === 1 && item.lastPurchased && item.cycle) {
-                    const nextDate = new Date(item.lastPurchased);
-                    nextDate.setDate(nextDate.getDate() + parseInt(item.cycle));
-                    const nextDateStr = nextDate.toISOString().split('T')[0];
+            lists.forEach(list => {
+                list.items.forEach(item => {
+                    if (item.status === 1 && item.lastPurchased && item.cycle) {
+                        const nextDate = new Date(item.lastPurchased);
+                        nextDate.setDate(nextDate.getDate() + parseInt(item.cycle));
+                        const nextDateStr = nextDate.toISOString().split('T')[0];
 
-                    if (nextDateStr <= tomorrowStr && item.lastRecommended !== todayStr) {
-                        item.status = 2;
-                        item.lastRecommended = todayStr;
-                        changed = true;
+                        if (nextDateStr <= tomorrowStr && item.lastRecommended !== todayStr) {
+                            item.status = 2;
+                            item.lastRecommended = todayStr;
+                            changed = true;
+                        }
                     }
-                }
+                });
             });
-            if (changed) render();
+            if (changed) {
+                saveData();
+                render();
+            }
         }
 
         function render() {
             const container = document.getElementById('sections-container');
+            if (!container) return;
             container.innerHTML = '';
-            const allItems = getCurrentItems();
-            const currentList = lists.find(l => l.id === currentListId);
-            if (!currentList) return;
+            
+            let currentList = lists.find(l => l.id === currentListId);
+            if (!currentList) {
+                if (lists.length > 0) {
+                    currentListId = lists[0].id;
+                    currentList = lists[0];
+                } else {
+                    return;
+                }
+            }
 
+            const allItems = currentList.items || [];
             document.getElementById('current-list-title').innerText = currentList.title;
+            
+            const exportSingleBtn = document.getElementById('export-single-btn');
+            if (exportSingleBtn) {
+                exportSingleBtn.innerHTML = `<i data-lucide="file-text" class="w-4 h-4"></i> 現在のリスト (${currentList.title})`;
+            }
 
             [4, 3, 2, 1].forEach(statusId => {
                 const sectionItems = allItems.filter(item => {
@@ -322,7 +399,8 @@
 
         function handleCardClick(id, e) {
             e.stopPropagation();
-            const item = getCurrentItems().find(i => i.id === id);
+            const items = getCurrentItems();
+            const item = items.find(i => i.id === id);
             if (!item) return;
 
             if (item.status === 1) moveTo(item.id, 2);
@@ -373,6 +451,7 @@
             const item = items.find(i => i.id === id);
             if (item) {
                 item.status = newStatus;
+                saveData();
                 render();
             }
         }
@@ -383,6 +462,7 @@
             if (item) {
                 item.lastPurchased = new Date().toISOString().split('T')[0];
                 item.status = 1;
+                saveData();
                 render();
             }
         }
@@ -411,13 +491,46 @@
             render();
         }
 
-        function editListName() {
+        function openEditListModal() {
             const list = lists.find(l => l.id === currentListId);
-            const newName = prompt("新しいリスト名を入力", list.title);
-            if (newName && newName.trim()) {
-                list.title = newName.trim();
+            if (!list) return;
+            document.getElementById('edit-list-name-input').value = list.title;
+            document.getElementById('list-edit-modal').classList.remove('hidden');
+        }
+
+        function closeEditListModal() {
+            document.getElementById('list-edit-modal').classList.add('hidden');
+        }
+
+        function saveListName() {
+            const newName = document.getElementById('edit-list-name-input').value.trim();
+            if (newName) {
+                const list = lists.find(l => l.id === currentListId);
+                if (list) list.title = newName;
+                saveData();
+                closeEditListModal();
                 render();
             }
+        }
+
+        function confirmDeleteList() {
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        function hideConfirm() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+        }
+
+        function deleteCurrentList() {
+            lists = lists.filter(l => l.id !== currentListId);
+            if (lists.length === 0) {
+                lists.push({ id: 'l' + Date.now(), title: '新しいリスト', items: [] });
+            }
+            currentListId = lists[0].id;
+            saveData();
+            hideConfirm();
+            closeEditListModal();
+            render();
         }
 
         function addNewList() {
@@ -426,9 +539,70 @@
                 const newId = 'l'+Date.now();
                 lists.push({id: newId, title: name.trim(), items: []});
                 currentListId = newId;
+                saveData();
                 toggleListOverlay();
                 render();
             }
+        }
+
+        function toggleSettingsOverlay() {
+            document.getElementById('settings-overlay').classList.toggle('hidden');
+        }
+
+        function exportData(isFullExport) {
+            let dataToExport;
+            let filename;
+
+            if (isFullExport) {
+                dataToExport = lists;
+                filename = `all_lists_${new Date().toISOString().split('T')[0]}.json`;
+            } else {
+                dataToExport = lists.find(l => l.id === currentListId);
+                if (!dataToExport) return;
+                filename = `list_${dataToExport.title}_${new Date().toISOString().split('T')[0]}.json`;
+            }
+
+            try {
+                const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            } catch (e) {
+                console.error("Download failed:", e);
+            }
+        }
+
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        imported.forEach(list => {
+                            lists.push({...list, id: 'l' + Date.now() + Math.random(), title: list.title + " (インポート)"});
+                        });
+                    } else if (imported.items) {
+                        lists.push({...imported, id: 'l' + Date.now(), title: (imported.title || "インポート") + " (インポート)"});
+                    }
+                    saveData();
+                    render();
+                    toggleSettingsOverlay();
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
         }
 
         function toggleListOverlay() {
@@ -439,6 +613,7 @@
 
         function renderListSelector() {
             const container = document.getElementById('list-selector-container');
+            if (!container) return;
             container.innerHTML = '';
             lists.forEach(l => {
                 const active = l.id === currentListId;
@@ -448,16 +623,6 @@
                 div.innerHTML = `<span>${l.title}</span><i data-lucide="${active ? 'check' : 'chevron-right'}" class="w-4 h-4"></i>`;
                 container.appendChild(div);
             });
-        }
-
-        function confirmDeleteList() { document.getElementById('confirm-modal').classList.remove('hidden'); }
-        function hideConfirm() { document.getElementById('confirm-modal').classList.add('hidden'); }
-        function deleteCurrentList() {
-            lists = lists.filter(l => l.id !== currentListId);
-            if (lists.length === 0) lists.push({ id: 'l' + Date.now(), title: '新しいリスト', items: [] });
-            currentListId = lists[0].id;
-            hideConfirm();
-            render();
         }
 
         function openModal(statusId = 2) {
@@ -476,7 +641,8 @@
 
         function openEditModal(event, id) {
             event.stopPropagation();
-            const item = getCurrentItems().find(i => i.id === id);
+            const items = getCurrentItems();
+            const item = items.find(i => i.id === id);
             if(!item) return;
             document.getElementById('modal-title').innerText = "商品を編集";
             document.getElementById('edit-id').value = item.id;
@@ -517,10 +683,11 @@
 
             if (id) {
                 const item = items.find(i => i.id == id);
-                Object.assign(item, data);
+                if (item) Object.assign(item, data);
             } else {
                 items.push({ id: Date.now(), status: window.activeStatusForAdd, ...data });
             }
+            saveData();
             closeModal();
             render();
         }
@@ -528,7 +695,8 @@
         function deleteItem() {
             const id = document.getElementById('edit-id').value;
             const list = lists.find(l => l.id === currentListId);
-            list.items = list.items.filter(i => i.id != id);
+            if (list) list.items = list.items.filter(i => i.id != id);
+            saveData();
             closeModal();
             render();
         }
@@ -542,13 +710,12 @@
             setInterval(checkAutoRecommend, 60000); 
             checkAutoRecommend();
         };
-           
+
         if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("sw.js")
-            .then(() => console.log("Service Worker Registered"));
+            navigator.serviceWorker.register("sw.js")
+                .then(() => console.log("Service Worker Registered"));
         }
     </script>
 </body>
 </html>
-
 
